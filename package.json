@@ -1,0 +1,8 @@
+{
+  "name": "dice-tactics-salas",
+  "version": "1.0.0",
+  "description": "Servidor de salas para jugar online a Dice Tactics (sin dependencias)",
+  "main": "servidor.js",
+  "scripts": { "start": "node servidor.js" },
+  "engines": { "node": ">=18" }
+}
