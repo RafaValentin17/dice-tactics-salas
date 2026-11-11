@@ -26,6 +26,11 @@ function nuevoCodigo() {
   return c;
 }
 
+// Código pedido al crear: letras y números, de 3 a 8.
+function limpiarCodigo(c) {
+  return String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+}
+
 function limpiarNombre(n) {
   return String(n || "").trim().slice(0, 16) || "Jugador";
 }
@@ -40,7 +45,7 @@ function datosSala(sala) {
     config: sala.config,
     empezada: sala.empezada,
     jugadores: sala.jugadores.map((j) => ({
-      nombre: j.nombre, numero: j.numero, conectado: !!j.ws, anfitrion: j.numero === sala.anfitrion,
+      nombre: j.nombre, numero: j.numero, conectado: !!j.ws, anfitrion: j.numero === sala.anfitrion, ia: !!j.ia,
     })),
   };
 }
@@ -57,7 +62,7 @@ function datosPartida(sala) {
   return {
     config: sala.config,
     semilla: sala.semilla,
-    jugadores: sala.jugadores.map((j) => ({ nombre: j.nombre, numero: j.numero })),
+    jugadores: sala.jugadores.map((j) => ({ nombre: j.nombre, numero: j.numero, ia: !!j.ia })),
   };
 }
 
@@ -95,7 +100,13 @@ function alRecibir(ws, datos) {
       break;
 
     case "crear": {
-      const codigo = nuevoCodigo();
+      let codigo = nuevoCodigo();
+      if (m.codigo !== undefined && String(m.codigo).trim() !== "") {
+        const pedido = limpiarCodigo(m.codigo);
+        if (pedido.length < 3) return enviar(ws, { tipo: "error", texto: "El código debe tener de 3 a 8 letras o números." });
+        if (salas.has(pedido)) return enviar(ws, { tipo: "error", texto: "Ese código ya está en uso: elige otro." });
+        codigo = pedido;
+      }
       const nueva = {
         codigo, config: { ...CONFIG_INICIAL }, empezada: false, semilla: 0,
         jugadores: [], ordenes: [], chat: [], anfitrion: 1, vaciaDesde: 0,
@@ -115,6 +126,7 @@ function alRecibir(ws, datos) {
       const nombre = limpiarNombre(m.nombre);
       // ¿Vuelve alguien que ya estaba? (mismo nombre)
       let j = s.jugadores.find((x) => x.nombre.toLowerCase() === nombre.toLowerCase());
+      if (j && j.ia) return enviar(ws, { tipo: "error", texto: "Ese nombre es de una IA de la sala: elige otro." });
       if (j && j.ws && j.ws !== ws && j.ws.readyState === 1) {
         return enviar(ws, { tipo: "error", texto: "Ya hay alguien conectado con ese nombre en la sala." });
       }
@@ -149,12 +161,36 @@ function alRecibir(ws, datos) {
       avisarSala(sala);
       break;
 
+    case "anadir_ia": {
+      if (!sala || !yo || yo.numero !== sala.anfitrion || sala.empezada) return;
+      if (sala.jugadores.length >= MAX_JUGADORES) return enviar(ws, { tipo: "error", texto: "La sala está llena (4 jugadores)." });
+      let numero = 1;
+      while (sala.jugadores.some((x) => x.numero === numero)) numero++;
+      let n = 1;
+      while (sala.jugadores.some((x) => x.nombre === `IA ${n}`)) n++;
+      sala.jugadores.push({ nombre: `IA ${n}`, numero, ws: null, ia: true });
+      sala.jugadores.sort((a, b) => a.numero - b.numero);
+      chatSistema(sala, `Se ha añadido la IA ${n}.`);
+      avisarSala(sala);
+      break;
+    }
+
+    case "quitar_ia": {
+      if (!sala || !yo || yo.numero !== sala.anfitrion || sala.empezada) return;
+      const ia = sala.jugadores.find((x) => x.ia && x.numero === Number(m.numero));
+      if (!ia) return;
+      sala.jugadores = sala.jugadores.filter((x) => x !== ia);
+      chatSistema(sala, `Se ha quitado a ${ia.nombre}.`);
+      avisarSala(sala);
+      break;
+    }
+
     case "empezar":
       if (!sala || !yo || yo.numero !== sala.anfitrion) return;
-      if (sala.jugadores.length < 2) return enviar(ws, { tipo: "error", texto: "Hacen falta al menos 2 jugadores." });
+      if (sala.jugadores.length < 2) return enviar(ws, { tipo: "error", texto: "Hacen falta al menos 2 jugadores (puedes añadir la IA)." });
       // Los números de jugador quedan seguidos (1, 2, 3...).
       sala.jugadores.forEach((x, i) => { x.numero = i + 1; if (x.ws) x.ws.numero = i + 1; });
-      sala.anfitrion = Math.min(...sala.jugadores.map((x) => x.numero));
+      sala.anfitrion = Math.min(...sala.jugadores.filter((x) => !x.ia).map((x) => x.numero));
       sala.empezada = true;
       sala.semilla = Math.floor(Math.random() * 2147483647);
       sala.ordenes = [];
@@ -183,7 +219,9 @@ function alRecibir(ws, datos) {
       if (!sala || !yo) return;
       if (!sala.empezada) {
         sala.jugadores = sala.jugadores.filter((x) => x !== yo);
-        if (sala.anfitrion === yo.numero && sala.jugadores.length) sala.anfitrion = sala.jugadores[0].numero;
+        const humanos = sala.jugadores.filter((x) => !x.ia);
+        if (!humanos.length) sala.jugadores = [];
+        if (sala.anfitrion === yo.numero && humanos.length) sala.anfitrion = humanos[0].numero;
       } else {
         yo.ws = null;
       }
