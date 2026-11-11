@@ -161,6 +161,25 @@ function alRecibir(ws, datos) {
       avisarSala(sala);
       break;
 
+    case "color": {
+      // Cada jugador elige el color de sus tropas (el anfitrión, también el de la IA).
+      if (!sala || !yo || sala.empezada) return;
+      const numero = Number.isInteger(m.numero) ? m.numero : yo.numero;
+      const indice = Number(m.indice);
+      if (!Number.isInteger(indice) || indice < 0 || indice > 9) return;
+      const objetivo = sala.jugadores.find((x) => x.numero === numero);
+      if (!objetivo) return;
+      if (numero !== yo.numero && !(objetivo.ia && yo.numero === sala.anfitrion)) return;
+      const colores = { ...(sala.config.colores || {}) };
+      for (const [clave, valor] of Object.entries(colores)) {
+        if (Number(clave) !== numero && valor === indice && sala.jugadores.some((x) => x.numero === Number(clave))) return;
+      }
+      colores[numero] = indice;
+      sala.config = { ...sala.config, colores };
+      avisarSala(sala);
+      break;
+    }
+
     case "anadir_ia": {
       if (!sala || !yo || yo.numero !== sala.anfitrion || sala.empezada) return;
       if (sala.jugadores.length >= MAX_JUGADORES) return enviar(ws, { tipo: "error", texto: "La sala está llena (4 jugadores)." });
