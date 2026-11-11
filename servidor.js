@@ -166,7 +166,7 @@ function alRecibir(ws, datos) {
       if (!sala || !yo || sala.empezada) return;
       const numero = Number.isInteger(m.numero) ? m.numero : yo.numero;
       const indice = Number(m.indice);
-      if (!Number.isInteger(indice) || indice < 0 || indice > 9) return;
+      if (!Number.isInteger(indice) || indice < 0 || indice > 15) return;
       const objetivo = sala.jugadores.find((x) => x.numero === numero);
       if (!objetivo) return;
       if (numero !== yo.numero && !(objetivo.ia && yo.numero === sala.anfitrion)) return;
